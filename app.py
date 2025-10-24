@@ -4,6 +4,7 @@ import sqlite3
 import os
 from tkinter import messagebox
 from PIL import Image
+from functools import partial
 
 data_dir = os.path.dirname(os.path.abspath(__file__))
 data_folder = os.path.join(data_dir, "data")
@@ -34,6 +35,9 @@ class App(ctk.CTk):
             size=(80,18)
         )
 
+        self.queries = []
+
+
 
         self.manipulation_table = ctk.CTkFrame(self.mainframe, width=775, height=335)
         self.manipulation_table.pack(padx=0, pady=0, fill="both", expand=True)
@@ -48,36 +52,48 @@ class App(ctk.CTk):
         self.loadbutton.pack(pady=10)
 
         self.table_name_entry = ctk.CTkEntry(self.mainframe, width=100, height=20, font=("Helvetica", 14))
+        self.entry2 = ctk.CTkOptionMenu(self.mainframe, width=100, height=20, font=("Helvetica", 14))
         self.table_name_entry.pack(pady=0)
 
 
         self.tableframe = ctk.CTkFrame(self.mainframe, width=775, height=550)
         self.tableframe.place(x=20,y=370)
 
-        self.table_title = ctk.CTkButton(self, text="Run Query", state="normal", height=40, width=160)
-        self.table_title.place(x=345,y=300)
+        self.run_query = ctk.CTkButton(self, text="Run Query", state="normal", height=40, width=160)
+        self.run_query.place(x=345,y=300)
 
-        #self.table_title.bind("<Button-1>", self.block_click())
+        self.queryframe = ctk.CTkFrame(self.manipulation_table, width=755, height=115)
+        self.queryframe.place(relx=0.5,y=185, anchor="center")
 
-        self.addcolumnbtn = ctk.CTkButton(self.manipulation_table, text="Add Column", command=self.pickselect)
-        self.removecolumnbtn = ctk.CTkButton(self.manipulation_table, text="Remove Column", command=self.pickfilter)
-        self.editcolumnbtn = ctk.CTkButton(self.manipulation_table, text="Edit Column", command=self.pickjoin)
+        self.table_title = ctk.CTkButton(self, text="No Table Loaded", state="normal", height=20, width=80)
+        self.table_title.place(relx=0.5,y=384, anchor="center")
 
-        self.addrowbtn = ctk.CTkButton(self.manipulation_table, text="Add Row", command=self.pickselect)
-        self.removerowbtn = ctk.CTkButton(self.manipulation_table, text="Remove Row", command=self.pickfilter)
-        self.editrowbtn = ctk.CTkButton(self.manipulation_table, text="Edit Row", command=self.pickjoin)
+        self.text1 = ctk.CTkLabel(self.manipulation_table, text="ERROR:")
+        self.text2 = ctk.CTkLabel(self.manipulation_table, text="ERROR:")
 
-        self.selectbtn = ctk.CTkButton(self.manipulation_table, text="Select", command=self.pickselect)
-        self.filterbtn = ctk.CTkButton(self.manipulation_table, text="Where", command=self.pickfilter)
-        self.joinbtn = ctk.CTkButton(self.manipulation_table, text="Join", command=self.pickjoin)
+        self.table_title.bind("<Button-1>", self.block_click())
 
-        self.orderbybtn = ctk.CTkButton(self.manipulation_table, text="Order By", command=self.pickselect)
-        self.groupbybtn = ctk.CTkButton(self.manipulation_table, text="Group By", command=self.pickfilter)
-        self.aggregatebtn = ctk.CTkButton(self.manipulation_table, text="Aggregate", command=self.pickjoin)
+        self.backbtn = ctk.CTkButton(self.manipulation_table, text="Go Back", command=self.goback)
 
-        self.loadnew= ctk.CTkButton(self.manipulation_table, text="Load New", command=self.pickselect)
-        self.exportbtn = ctk.CTkButton(self.manipulation_table, text="Export", command=self.pickfilter)
-        self.clearqrybtn = ctk.CTkButton(self.manipulation_table, text="Clear Query", command=self.pickjoin)
+        self.addcolumnbtn = ctk.CTkButton(self.manipulation_table, text="Add Column")
+        self.removecolumnbtn = ctk.CTkButton(self.manipulation_table, text="Remove Column")
+        self.editcolumnbtn = ctk.CTkButton(self.manipulation_table, text="Edit Column")
+
+        self.addrowbtn = ctk.CTkButton(self.manipulation_table, text="Add Row")
+        self.removerowbtn = ctk.CTkButton(self.manipulation_table, text="Remove Row")
+        self.editrowbtn = ctk.CTkButton(self.manipulation_table, text="Edit Row")
+
+        self.selectbtn = ctk.CTkButton(self.manipulation_table, text="Select")
+        self.filterbtn = ctk.CTkButton(self.manipulation_table, text="Where")
+        self.joinbtn = ctk.CTkButton(self.manipulation_table, text="Join")
+
+        self.orderbybtn = ctk.CTkButton(self.manipulation_table, text="Order By")
+        self.groupbybtn = ctk.CTkButton(self.manipulation_table, text="Group By")
+        self.aggregatebtn = ctk.CTkButton(self.manipulation_table, text="Aggregate")
+
+        self.loadnew= ctk.CTkButton(self.manipulation_table, text="Load New")
+        self.exportbtn = ctk.CTkButton(self.manipulation_table, text="Export")
+        self.clearqrybtn = ctk.CTkButton(self.manipulation_table, text="Clear Query")
 
         self.all_manipulation_buttons = {self.addcolumnbtn, self.removecolumnbtn, self.editcolumnbtn,
                                          self.addrowbtn, self.removerowbtn, self.editrowbtn, self.selectbtn,
@@ -85,30 +101,86 @@ class App(ctk.CTk):
                                          self.aggregatebtn, self.loadnew, self.exportbtn, self.clearqrybtn
                                          }
 
+        self.resetbuttons()
+
+        self.manipulation_commands = {self.addcolumnbtn: self.addcolumn}
+
 
         logo_label.lift()
 
-        ## SQL Functions
+    ## GUI FUNCTIONS
 
-    def pickselect(self):
+    def resetbuttons(self):
+        for x in self.all_manipulation_buttons:
+            if x == self.clearqrybtn:
+                x.configure(command=self.clearquery)
+            elif x == self.exportbtn:
+                x.configure(command=self.export)
+            elif x == self.loadnew:
+                x.configure(command=self.loadnewf)
+            else:
+                x.configure(command=partial(self.pick, x))
+        self.backbtn.place_forget()
+        self.text1.place_forget()
+        self.text2.place_forget()
+        self.table_name_entry.place_forget()
+        self.entry2.place_forget()
+
+        for widget in self.queryframe.winfo_children():
+            widget.destroy()
+
+        for i, query in enumerate(self.queries):
+            entry = ctk.CTkEntry(self.queryframe, width=730)  # slightly smaller than frame width
+            entry.bind("<Key>", lambda e: "break")
+            entry.insert(0, query)
+            entry.place(x=10, y=5 + i * 30)
+
+    def export(self):
+        print("incomplete")
+
+
+    def loadnewf(self):
         for x in self.all_manipulation_buttons:
             x.place_forget()
-        self.selectbtn.place(x=315,y=10)
+        self.loadbutton.pack(pady=10)
+        self.table_name_entry.pack(pady=0)
+        self.title("NoCodeSQL")
+        self.table_title.configure(text="No Table Loaded")
 
-    def pickjoin(self):
+        for widget in self.tableframe.winfo_children():
+            widget.destroy()
+
+        self.tableframe = ctk.CTkScrollableFrame(self.mainframe, width=775, height=550)
+        self.tableframe.place(x=20, y=370)
+
+
+    def goback(self):
+        self.manipulateTable()
+        self.resetbuttons()
+
+
+    def pick(self, button):
         for x in self.all_manipulation_buttons:
             x.place_forget()
-        self.joinbtn.place(x=315,y=10)
-
-    def pickfilter(self):
-        for x in self.all_manipulation_buttons:
-            x.place_forget()
-        self.filterbtn.place(x=315,y=10)
-
+        button.place(x=315,y=10)
+        self.backbtn.place(x=20,y=10)
+        if button == self.addcolumnbtn:
+            self.table_name_entry.delete(0, ctk.END)
+            self.text1.configure(text="Column Name:")
+            self.text1.place(x=275, y=50)
+            self.text2.configure(text="Column Type:")
+            self.entry2.configure(values=["", "TEXT", "INTEGER", "REAL", "BLOB", "NUMERIC"])
+            self.text2.place(x=415, y=50)
+            self.table_name_entry.place(x=285, y=80)
+            self.entry2.set("")
+            self.entry2.place(x=425, y=80)
+            button.configure(command=self.manipulation_commands[button])
 
     def manipulateTable(self):
         self.loadbutton.forget()
         self.table_name_entry.forget()
+
+        self.table_name_entry.delete(0, ctk.END)
 
         self.loadnew.place(x=615,y=15)
         self.exportbtn.place(x=615,y=50)
@@ -130,12 +202,29 @@ class App(ctk.CTk):
         self.removecolumnbtn.place(x=15, y=50)
         self.editcolumnbtn.place(x=15, y=85)
 
+    def clearquery(self):
+        self.query = {}
+
 
     def block_click(self):
         return "break"
 
+    ## SQL FUNCTIONS
+
+    def addcolumn(self):
+        name = self.table_name_entry.get().strip()
+        type = self.entry2.get().strip()
+        table_name = self.current_table
+
+
+        sql = f"ALTER TABLE {table_name} ADD COLUMN {name} {type}"
+        self.queries.append(sql)
+
+        self.goback()
+
     def loadTable(self):
-       #self.table_title.configure(text=(f"Table: {self.DB_FILE[50::]}"))
+
+       self.table_title.configure(text=f"Table: {self.DB_FILE[50::]}")
 
        self.title(f"Table: {self.DB_FILE[50::]}")
 
@@ -156,6 +245,8 @@ class App(ctk.CTk):
                conn.close()
                return
            table_name = table_name[0]
+
+           self.current_table = table_name
 
            cursor.execute(f"PRAGMA table_info({table_name})")
            columns_info = cursor.fetchall()
