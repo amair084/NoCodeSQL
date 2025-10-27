@@ -2,9 +2,10 @@
 import customtkinter as ctk
 import sqlite3
 import os
-from tkinter import messagebox
+from tkinter import messagebox, filedialog
 from PIL import Image
 from functools import partial
+import shutil
 
 data_dir = os.path.dirname(os.path.abspath(__file__))
 data_folder = os.path.join(data_dir, "data")
@@ -53,13 +54,14 @@ class App(ctk.CTk):
 
         self.table_name_entry = ctk.CTkEntry(self.mainframe, width=100, height=20, font=("Helvetica", 14))
         self.entry2 = ctk.CTkOptionMenu(self.mainframe, width=100, height=20, font=("Helvetica", 14))
+        self.entry3 = ctk.CTkOptionMenu(self.mainframe, width=100, height=20, font=("Helvetica", 14))
         self.table_name_entry.pack(pady=0)
 
 
         self.tableframe = ctk.CTkFrame(self.mainframe, width=775, height=550)
         self.tableframe.place(x=20,y=370)
 
-        self.run_query = ctk.CTkButton(self, text="Run Query", state="normal", height=40, width=160)
+        self.run_query = ctk.CTkButton(self, text="Run Query", state="normal", height=40, width=160, command=self.runquery)
         self.run_query.place(x=345,y=300)
 
         self.queryframe = ctk.CTkFrame(self.manipulation_table, width=755, height=115)
@@ -70,6 +72,7 @@ class App(ctk.CTk):
 
         self.text1 = ctk.CTkLabel(self.manipulation_table, text="ERROR:")
         self.text2 = ctk.CTkLabel(self.manipulation_table, text="ERROR:")
+        self.text3 = ctk.CTkLabel(self.manipulation_table, text="ERROR:")
 
         self.table_title.bind("<Button-1>", self.block_click())
 
@@ -98,12 +101,14 @@ class App(ctk.CTk):
         self.all_manipulation_buttons = {self.addcolumnbtn, self.removecolumnbtn, self.editcolumnbtn,
                                          self.addrowbtn, self.removerowbtn, self.editrowbtn, self.selectbtn,
                                          self.filterbtn, self.joinbtn, self.orderbybtn, self.groupbybtn,
-                                         self.aggregatebtn, self.loadnew, self.exportbtn, self.clearqrybtn
+                                         self.aggregatebtn, self.exportbtn, self.loadnew, self.clearqrybtn
                                          }
 
         self.resetbuttons()
 
-        self.manipulation_commands = {self.addcolumnbtn: self.addcolumn}
+        self.manipulation_commands = {self.addcolumnbtn: self.addcolumn, self.removecolumnbtn: self.removecolumn,
+                                      self.editcolumnbtn: self.editcolumn
+                                      }
 
 
         logo_label.lift()
@@ -130,13 +135,10 @@ class App(ctk.CTk):
             widget.destroy()
 
         for i, query in enumerate(self.queries):
-            entry = ctk.CTkEntry(self.queryframe, width=730)  # slightly smaller than frame width
+            entry = ctk.CTkEntry(self.queryframe, width=730)
             entry.bind("<Key>", lambda e: "break")
             entry.insert(0, query)
             entry.place(x=10, y=5 + i * 30)
-
-    def export(self):
-        print("incomplete")
 
 
     def loadnewf(self):
@@ -164,6 +166,7 @@ class App(ctk.CTk):
             x.place_forget()
         button.place(x=315,y=10)
         self.backbtn.place(x=20,y=10)
+        #ADD COLUMN
         if button == self.addcolumnbtn:
             self.table_name_entry.delete(0, ctk.END)
             self.text1.configure(text="Column Name:")
@@ -174,6 +177,26 @@ class App(ctk.CTk):
             self.table_name_entry.place(x=285, y=80)
             self.entry2.set("")
             self.entry2.place(x=425, y=80)
+        #REMOVE COLLUMN
+        elif button == self.removecolumnbtn:
+            columns = self.get_columns()
+            self.text2.configure(text="Select Column:")
+            self.text2.place(x=345, y=50)
+            self.entry2.configure(values=columns)
+            self.entry2.set("")
+            self.entry2.place(x=355, y=80)
+        elif button == self.editcolumnbtn:
+            columns = self.get_columns()
+            self.text1.configure(text="New Name:")
+            self.text1.place(x=410, y=50)
+            self.text2.configure(text="Select Column:")
+            self.text2.place(x=290, y=50)
+            self.entry2.configure(values=columns)
+            self.entry2.set("")
+            self.entry2.place(x=295, y=80)
+            self.table_name_entry.place(x=415, y=79)
+            self.table_name_entry.delete(0, ctk.END)
+        if button in self.manipulation_commands:
             button.configure(command=self.manipulation_commands[button])
 
     def manipulateTable(self):
@@ -203,13 +226,100 @@ class App(ctk.CTk):
         self.editcolumnbtn.place(x=15, y=85)
 
     def clearquery(self):
-        self.query = {}
+        self.queries.clear()
+        self.resetbuttons()
 
 
     def block_click(self):
         return "break"
 
+
     ## SQL FUNCTIONS
+
+    def export(self):
+        save_path = filedialog.asksaveasfilename(
+            defaultextension=".db",
+            filetypes=[("SQLite Database", "*.db")],
+            initialfile=os.path.basename(self.DB_FILE)
+        )
+
+        if not save_path:
+            return
+
+        shutil.copy(self.DB_FILE, save_path)
+
+    def editcolumn(self):
+        conn = sqlite3.connect(self.DB_FILE)
+        cursor = conn.cursor()
+
+        column_to_edit = self.entry2.get()
+        column_new_name = self.table_name_entry.get()
+
+        if column_to_edit != "":
+            if column_new_name != "":
+                self.queries.append(f"ALTER TABLE {self.current_table} RENAME COLUMN {column_to_edit} TO {column_new_name}")
+
+        conn.close()
+
+        self.loadTable()
+        self.resetbuttons()
+
+
+
+    def removecolumn(self):
+        conn = sqlite3.connect(self.DB_FILE)
+        cursor = conn.cursor()
+
+        column_to_remove = self.entry2.get()
+
+        print(column_to_remove)
+
+        cursor.execute(f"PRAGMA table_info({self.current_table})")
+        columns = cursor.fetchall()
+
+        keep = [c[1] for c in columns if c[1] != column_to_remove]
+
+        self.queries.append(f"CREATE TABLE temp_table AS SELECT {', '.join(keep)} FROM {self.current_table}")
+        self.queries.append(f"DROP TABLE {self.current_table}")
+        self.queries.append(f"ALTER TABLE temp_table RENAME TO {self.current_table}")
+
+        conn.close()
+
+        self.loadTable()
+        self.resetbuttons()
+
+
+    def get_columns(self):
+        conn = sqlite3.connect(self.DB_FILE)
+        cursor = conn.cursor()
+
+        cursor.execute(f"PRAGMA table_info({self.current_table})")
+        columns = cursor.fetchall()
+
+        column_names = [col[1] for col in columns]
+        conn.close()
+
+        return column_names
+
+    def runquery(self):
+        if self.queries == []:
+            messagebox.showwarning("Query Error", "There are no queries to run.")
+            return
+
+        conn = sqlite3.connect(self.DB_FILE)
+        cursor = conn.cursor()
+
+        for x in self.queries:
+            cursor.execute(x)
+            print("hi")
+
+        conn.commit()
+        conn.close()
+
+        self.queries.clear()
+        self.loadTable()
+        self.resetbuttons()
+
 
     def addcolumn(self):
         name = self.table_name_entry.get().strip()
