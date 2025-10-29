@@ -38,6 +38,10 @@ class App(ctk.CTk):
 
         self.queries = []
 
+        self.currententries = []
+
+        self.currenttext = []
+
 
 
         self.manipulation_table = ctk.CTkFrame(self.mainframe, width=775, height=335)
@@ -107,8 +111,11 @@ class App(ctk.CTk):
         self.resetbuttons()
 
         self.manipulation_commands = {self.addcolumnbtn: self.addcolumn, self.removecolumnbtn: self.removecolumn,
-                                      self.editcolumnbtn: self.editcolumn
+                                      self.editcolumnbtn: self.editcolumn, self.addrowbtn: self.addrow, self.removerowbtn:
+                                      self.removerow, self.editrowbtn: self.editrows
                                       }
+
+        self.nocommand = (lambda *args, **kwargs: None)
 
 
         logo_label.lift()
@@ -130,6 +137,11 @@ class App(ctk.CTk):
         self.text2.place_forget()
         self.table_name_entry.place_forget()
         self.entry2.place_forget()
+        self.entry3.place_forget()
+        for x in self.currententries:
+            x.place_forget()
+        for x in self.currenttext:
+            x.place_forget()
 
         for widget in self.queryframe.winfo_children():
             widget.destroy()
@@ -139,6 +151,9 @@ class App(ctk.CTk):
             entry.bind("<Key>", lambda e: "break")
             entry.insert(0, query)
             entry.place(x=10, y=5 + i * 30)
+
+        self.currententries.clear()
+        self.currenttext.clear()
 
 
     def loadnewf(self):
@@ -172,7 +187,7 @@ class App(ctk.CTk):
             self.text1.configure(text="Column Name:")
             self.text1.place(x=275, y=50)
             self.text2.configure(text="Column Type:")
-            self.entry2.configure(values=["", "TEXT", "INTEGER", "REAL", "BLOB", "NUMERIC"])
+            self.entry2.configure(values=["", "TEXT", "INTEGER", "REAL", "BLOB", "NUMERIC"],command=self.nocommand)
             self.text2.place(x=415, y=50)
             self.table_name_entry.place(x=285, y=80)
             self.entry2.set("")
@@ -182,20 +197,65 @@ class App(ctk.CTk):
             columns = self.get_columns()
             self.text2.configure(text="Select Column:")
             self.text2.place(x=345, y=50)
-            self.entry2.configure(values=columns)
+            self.entry2.configure(values=columns,command=self.nocommand)
             self.entry2.set("")
             self.entry2.place(x=355, y=80)
+        # EDIT COLUMN
         elif button == self.editcolumnbtn:
             columns = self.get_columns()
             self.text1.configure(text="New Name:")
             self.text1.place(x=410, y=50)
             self.text2.configure(text="Select Column:")
             self.text2.place(x=290, y=50)
-            self.entry2.configure(values=columns)
+            self.entry2.configure(values=columns,command=self.nocommand)
             self.entry2.set("")
             self.entry2.place(x=295, y=80)
             self.table_name_entry.place(x=415, y=79)
             self.table_name_entry.delete(0, ctk.END)
+        # ADD ROW
+        elif button == self.addrowbtn:
+            columns = self.get_columns()
+            done=0
+            for x, col in enumerate(columns):
+                if len(columns) > 8:
+                    self.goback()
+                    messagebox.showwarning("Column Error", "There are too many columns. Max=8")
+                    break
+                text = ctk.CTkLabel(self.manipulation_table, text=col)
+                entry = ctk.CTkEntry(self.mainframe, width=100, height=20, font=("Helvetica", 14))
+                self.currententries.append(entry)
+                self.currenttext.append(text)
+                text.place(x=175 + x * 120, y=40)
+                entry.place(x=175 + x * 120, y=70)
+                done = done + 1
+                if done > 4:
+                    entry.place(x=175 + (x-4) * 120, y=110)
+                    text.place(x=175 + (x-4) * 120, y=80)
+        # REMOVE ROW
+        elif button == self.removerowbtn:
+            columns = self.get_columns()
+            self.entry2.set("")
+            self.entry2.place(x=290, y=80)
+            self.entry2.configure(values=columns, command=self.populatevalues)
+            self.text1.place(x=285, y=50)
+            self.text1.configure(text="Select Column:")
+            self.entry3.place(x=410, y=80)
+            self.entry3.set("")
+            self.entry3.configure(values=["SELECT A COLUMN"])
+            self.text2.place(x=405, y=50)
+            self.text2.configure(text="Select Value:")
+        # EDIT ROW
+        elif button == self.editrowbtn:
+            columns = self.get_columns()
+            self.entry2.set("")
+            self.entry2.place(x=355, y=45)
+            self.entry2.configure(values=columns, command=self.populaterowvalues)
+
+
+
+
+
+
         if button in self.manipulation_commands:
             button.configure(command=self.manipulation_commands[button])
 
@@ -228,13 +288,110 @@ class App(ctk.CTk):
     def clearquery(self):
         self.queries.clear()
         self.resetbuttons()
+        self.currententries.clear()
+        self.currenttext.clear()
 
 
     def block_click(self):
         return "break"
 
+    def populaterowvalues(self, event=None):
+        rows = self.populatevalues()
+        done = 0
+        for x, row in enumerate(rows):
+            if len(rows) > 8:
+                self.goback()
+                messagebox.showwarning("Row Error", "There are too many rows. Max=8")
+                break
+            text = ctk.CTkLabel(self.manipulation_table, text=row)
+            entry = ctk.CTkEntry(self.mainframe, width=100, height=20, font=("Helvetica", 14))
+            self.currententries.append(entry)
+            self.currenttext.append(text)
+            text.place(x=198 + x * 120, y=46)
+            entry.place(x=175 + x * 120, y=75)
+            done = done + 1
+            if done > 4:
+                entry.place(x=175 + (x - 4) * 120, y=110)
+                text.place(x=198 + (x - 4) * 120, y=85)
 
     ## SQL FUNCTIONS
+
+    def editrows(self):
+        key_column = self.entry2.get()  # column user selected
+        conn = sqlite3.connect(self.DB_FILE)
+        cursor = conn.cursor()
+
+        # Get all rows for that column
+        cursor.execute(f'SELECT rowid, "{key_column}" FROM "{self.current_table}"')
+        rows = cursor.fetchall()  # list of (rowid, value)
+
+        for i, entry in enumerate(self.currententries):
+            new_value = entry.get().strip()
+            if new_value != "":
+                rowid, original_value = rows[i]
+
+                # Escape quotes if needed
+                new_value_escaped = new_value.replace("'", "''")
+
+                sql = f'UPDATE "{self.current_table}" SET "{key_column}" = \'{new_value_escaped}\' WHERE rowid = {rowid}'
+
+                self.queries.append(sql)
+
+
+
+        conn.close()
+        self.loadTable()
+        self.resetbuttons()
+
+    def populatevalues(self, event=None):
+        column = self.entry2.get()
+
+        conn = sqlite3.connect(self.DB_FILE)
+        cursor = conn.cursor()
+
+        cursor.execute(f'SELECT "{column}" FROM "{self.current_table}"')
+        values = [str(row[0]) for row in cursor.fetchall()]
+
+        conn.close()
+
+        self.entry3.configure(values=values)
+        return values
+
+
+    def addrow(self):
+        conn = sqlite3.connect(self.DB_FILE)
+        cursor = conn.cursor()
+
+        columns = self.get_columns()
+
+        values = [entry.get() for entry in self.currententries]
+
+        for x in self.currententries:
+            print(x)
+
+        values = [v.strip() for v in values]
+
+        formatted_values = []
+        for v in values:
+            if v == "":
+                formatted_values.append("NULL")
+            elif v.replace(".", "", 1).isdigit():  # integer or float
+                formatted_values.append(v)
+            else:
+                # Escape internal quotes
+                v = v.replace("'", "''")
+                formatted_values.append(f"'{v}'")
+
+        cols_sql = ", ".join([f'"{c}"' for c in columns])
+        vals_sql = ", ".join(formatted_values)
+
+        sql = f'INSERT INTO "{self.current_table}" ({cols_sql}) VALUES ({vals_sql});'
+        print("SQL:", sql)
+
+        self.queries.append(sql)
+
+        self.loadTable()
+        self.resetbuttons()
 
     def export(self):
         save_path = filedialog.asksaveasfilename(
@@ -264,15 +421,26 @@ class App(ctk.CTk):
         self.loadTable()
         self.resetbuttons()
 
+    def removerow(self):
+        conn = sqlite3.connect(self.DB_FILE)
+        cursor = conn.cursor()
 
+        column_TR = self.entry2.get()
+
+        row_to_remove = self.entry3.get()
+
+        self.queries.append(f"DELETE FROM {self.current_table} WHERE {column_TR} = '{row_to_remove}'")
+
+        conn.close()
+
+        self.loadTable()
+        self.resetbuttons()
 
     def removecolumn(self):
         conn = sqlite3.connect(self.DB_FILE)
         cursor = conn.cursor()
 
         column_to_remove = self.entry2.get()
-
-        print(column_to_remove)
 
         cursor.execute(f"PRAGMA table_info({self.current_table})")
         columns = cursor.fetchall()
