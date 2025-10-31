@@ -53,7 +53,7 @@ class App(ctk.CTk):
         logo_label.image = long_logo  # keep reference
         logo_label.place(x=750, y=0)  # adjust positioning
 
-        self.loadbutton = ctk.CTkButton(self.mainframe, text="Create/Load Table", command=self.createTable)
+        self.loadbutton = ctk.CTkButton(self.mainframe, text="Create/Load Database", command=self.createTable)
         self.loadbutton.pack(pady=10)
 
         self.table_name_entry = ctk.CTkEntry(self.mainframe, width=100, height=20, font=("Helvetica", 14))
@@ -61,9 +61,22 @@ class App(ctk.CTk):
         self.entry3 = ctk.CTkOptionMenu(self.mainframe, width=100, height=20, font=("Helvetica", 14))
         self.table_name_entry.pack(pady=0)
 
+        outer = ctk.CTkScrollableFrame(self.mainframe, width=375, height=500, orientation="vertical")
+        outer.place(x=10, y=370)
 
-        self.tableframe = ctk.CTkFrame(self.mainframe, width=775, height=550)
-        self.tableframe.place(x=20,y=370)
+        inner = ctk.CTkScrollableFrame(outer, width=375, height=500, orientation="horizontal")
+        inner.pack(fill="both", expand=True)
+
+        outer1 = ctk.CTkScrollableFrame(self.mainframe, width=375, height=500, orientation="vertical")
+        outer1.place(x=405, y=370)
+
+        inner1 = ctk.CTkScrollableFrame(outer1, width=375, height=500, orientation="horizontal")
+        inner1.pack(fill="both", expand=True)
+
+        self.tableframe = inner
+
+        self.filterframe = inner1
+
 
         self.run_query = ctk.CTkButton(self, text="Run Query", state="normal", height=40, width=160, command=self.runquery)
         self.run_query.place(x=345,y=300)
@@ -117,6 +130,11 @@ class App(ctk.CTk):
 
         self.nocommand = (lambda *args, **kwargs: None)
 
+        self.bind("<Left>", lambda e: inner._parent_canvas.xview_scroll(-5, "units"))
+        self.bind("<Right>", lambda e: inner._parent_canvas.xview_scroll(5, "units"))
+        self.bind("<Down>", lambda e: outer._parent_canvas.yview_scroll(5, "units"))
+        self.bind("<Up>", lambda e: outer._parent_canvas.yview_scroll(-5, "units"))
+
 
         logo_label.lift()
 
@@ -167,8 +185,14 @@ class App(ctk.CTk):
         for widget in self.tableframe.winfo_children():
             widget.destroy()
 
-        self.tableframe = ctk.CTkScrollableFrame(self.mainframe, width=775, height=550)
-        self.tableframe.place(x=20, y=370)
+        self.tableframe = ctk.CTkScrollableFrame(self.mainframe, width=375, height=530)
+        self.tableframe.place(x=10, y=370)
+
+        for widget in self.filterframe.winfo_children():
+            widget.destroy()
+
+        self.filterframe = ctk.CTkScrollableFrame(self.mainframe, width=375, height=530)
+        self.filterframe.place(x=305, y=370)
 
 
     def goback(self):
@@ -345,18 +369,35 @@ class App(ctk.CTk):
 
     def populatevalues(self, event=None):
         column = self.entry2.get()
+        if not column or not getattr(self, "current_table", None):
+            self.entry3.configure(values=[])
+            return
 
         conn = sqlite3.connect(self.DB_FILE)
         cursor = conn.cursor()
 
-        cursor.execute(f'SELECT "{column}" FROM "{self.current_table}"')
-        values = [str(row[0]) for row in cursor.fetchall()]
-
+        # fetch rowid + value (preserves order)
+        cursor.execute(f'SELECT rowid, "{column}" FROM "{self.current_table}"')
+        rows = cursor.fetchall()
         conn.close()
 
-        self.entry3.configure(values=values)
-        return values
+        # build display list and map to rowid
+        display_list = []
+        self._value_to_rowid = {}  # store on self for later lookup
+        for rowid, val in rows:
+            if val is None:
+                display = f"{rowid}: <NULL>"
+            else:
+                display = f"{rowid}: {val}"
+            display_list.append(display)
+            self._value_to_rowid[display] = rowid
 
+        if not display_list:
+            display_list = ["<no values>"]
+
+        self.entry3.configure(values=display_list)
+        self.entry3.set(display_list[0])
+        return display_list
 
     def addrow(self):
         conn = sqlite3.connect(self.DB_FILE)
@@ -422,17 +463,21 @@ class App(ctk.CTk):
         self.resetbuttons()
 
     def removerow(self):
-        conn = sqlite3.connect(self.DB_FILE)
-        cursor = conn.cursor()
+        sel = self.entry3.get()
+        if not sel:
+            messagebox.showwarning("Selection", "No value selected.")
+            return
 
-        column_TR = self.entry2.get()
+        # lookup rowid
+        rowid = self._value_to_rowid.get(sel)
+        if rowid is None:
+            messagebox.showerror("Lookup", "Could not map selection to a row.")
+            return
 
-        row_to_remove = self.entry3.get()
+        # append single SQL string (as you prefer)
+        self.queries.append(f'DELETE FROM "{self.current_table}" WHERE rowid = {rowid}')
 
-        self.queries.append(f"DELETE FROM {self.current_table} WHERE {column_TR} = '{row_to_remove}'")
-
-        conn.close()
-
+        # refresh UI
         self.loadTable()
         self.resetbuttons()
 
@@ -502,9 +547,9 @@ class App(ctk.CTk):
 
     def loadTable(self):
 
-       self.table_title.configure(text=f"Table: {self.DB_FILE[50::]}")
+       self.table_title.configure(text=f"Database: {self.DB_FILE[50::]}")
 
-       self.title(f"Table: {self.DB_FILE[50::]}")
+       self.title(f"Database: {self.DB_FILE[50::]}")
 
        # Clear previous widgets
        for widget in self.tableframe.winfo_children():
@@ -546,6 +591,8 @@ class App(ctk.CTk):
            for c, value in enumerate(row):
                label = ctk.CTkLabel(self.tableframe, text=str(value))
                label.grid(row=r, column=c, padx=20, pady=0)
+
+       self.filterframe = self.tableframe
 
        self.manipulateTable()
 
